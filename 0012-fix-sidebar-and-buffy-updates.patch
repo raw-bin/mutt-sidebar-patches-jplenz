@@ -1,0 +1,81 @@
+From 3f2e59020dc4bfb61faafc847f7871fa897eaaa2 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Mon, 24 Oct 2011 19:56:15 +0200
+Subject: [PATCH 12/19] fix sidebar and buffy updates
+
+i)  if the sidebar was previously turned off and is toggled on, force
+    re-counting of mails.
+ii) if mutt_buffy_check() records any new mail, don't necessarily do a
+    full redraw
+iii) Introduce REDRAW_SIDEBAR to only redraw the sidebar. This is done
+    very often, but utilizing REDRAW_FULL for that (as it was done
+    previously) leads to flicker effects, although you only have to
+    update a simple number.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ curs_main.c |    8 +++++++-
+ mutt_menu.h |    1 +
+ sidebar.c   |    1 +
+ 3 files changed, 9 insertions(+), 1 deletions(-)
+
+diff --git a/curs_main.c b/curs_main.c
+index cd8b0a7..1564f62 100644
+--- a/curs_main.c
++++ b/curs_main.c
+@@ -523,7 +523,7 @@ int mutt_index_menu (void)
+      {
+        if (mutt_buffy_notify ())
+        {
+-         menu->redraw |= REDRAW_FULL;
++         menu->redraw |= REDRAW_STATUS;
+          if (option (OPTBEEPNEW))
+            beep ();
+        }
+@@ -532,6 +532,9 @@ int mutt_index_menu (void)
+        do_buffy_notify = 1;
+     }
+ 
++    if(option(OPTSIDEBAR))
++        menu->redraw |= REDRAW_SIDEBAR;
++
+     if (op != -1)
+       mutt_curs_set (0);
+ 
+@@ -540,6 +543,9 @@ int mutt_index_menu (void)
+       menu_redraw_full (menu);
+       draw_sidebar(menu->menu);
+       mutt_show_error ();
++    } else if(menu->redraw & REDRAW_SIDEBAR) {
++        draw_sidebar(menu->menu);
++        menu->redraw &= ~REDRAW_SIDEBAR;
+     }
+ 
+     if (menu->menu == MENU_MAIN)
+diff --git a/mutt_menu.h b/mutt_menu.h
+index 6ca70d7..0f42d95 100644
+--- a/mutt_menu.h
++++ b/mutt_menu.h
+@@ -34,6 +34,7 @@
+ #define REDRAW_FULL		(1<<5)
+ #define REDRAW_BODY		(1<<6)
+ #define REDRAW_SIGWINCH		(1<<7)
++#define REDRAW_SIDEBAR		(1<<8)
+ 
+ #define M_MODEFMT "-- Mutt: %s"
+ 
+diff --git a/sidebar.c b/sidebar.c
+index 60bee73..b316379 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -195,6 +195,7 @@ int draw_sidebar(int menu) {
+                         saveSidebarWidth = SidebarWidth;
+                         SidebarWidth = 0;
+                 } else if(!prev_show_value && option(OPTSIDEBAR)) {
++                        mutt_buffy_check(1); /* we probably have bad or no numbers */
+                         SidebarWidth = saveSidebarWidth;
+                 }
+                 prev_show_value = option(OPTSIDEBAR);
+-- 
+1.7.7.3
+

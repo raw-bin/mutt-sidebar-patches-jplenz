@@ -1,0 +1,54 @@
+From aed15971b7e05c215fb2277f95640a3b0a8029f5 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Mon, 24 Oct 2011 19:31:19 +0200
+Subject: [PATCH 10/19] only count mail if sidebar is active
+
+if the sidebar is not active, there's no need to count the mail. (The
+information will not be used anyway and wastes performance.)
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ buffy.c |    5 +++++
+ mh.c    |    3 +++
+ 2 files changed, 8 insertions(+), 0 deletions(-)
+
+diff --git a/buffy.c b/buffy.c
+index 3c3d462..68f31c3 100644
+--- a/buffy.c
++++ b/buffy.c
+@@ -348,6 +348,9 @@ void buffy_maildir_update (BUFFY* mailbox)
+   struct dirent *de;
+   char *p;
+ 
++  if(!option(OPTSIDEBAR))
++      return;
++
+   mailbox->msgcount = 0;
+   mailbox->msg_unread = 0;
+   mailbox->msg_flagged = 0;
+@@ -439,6 +442,8 @@ void buffy_mbox_update (BUFFY* mailbox, struct stat *sb)
+ {
+   CONTEXT *ctx = NULL;
+ 
++  if(!option(OPTSIDEBAR))
++      return;
+   if(mailbox->sb_last_checked > sb->st_mtime && mailbox->msgcount != 0)
+       return; /* no check necessary */
+ 
+diff --git a/mh.c b/mh.c
+index ecb929b..c24fc70 100644
+--- a/mh.c
++++ b/mh.c
+@@ -250,6 +250,9 @@ void mh_buffy_update (const char *path, int *msgcount, int *msg_unread, int *msg
+   struct mh_sequences mhs;
+   memset (&mhs, 0, sizeof (mhs));
+ 
++  if(!option(OPTSIDEBAR))
++      return;
++
+   if (mh_read_sequences (&mhs, path) < 0)
+     return;
+ 
+-- 
+1.7.7.3
+

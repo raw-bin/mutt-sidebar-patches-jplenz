@@ -1,0 +1,83 @@
+From e15d72e6302b14f7757d0b9670de73944a5d6e05 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Mon, 24 Oct 2011 16:32:40 +0200
+Subject: [PATCH 04/19] applying debian/patches/mutt-patched/sidebar-sorted
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ init.h    |    5 +++++
+ mutt.h    |    1 +
+ sidebar.c |   29 +++++++++++++++++++++++++++++
+ 3 files changed, 35 insertions(+), 0 deletions(-)
+
+diff --git a/init.h b/init.h
+index 4671984..4d58f7f 100644
+--- a/init.h
++++ b/init.h
+@@ -1974,6 +1974,11 @@ struct option_t MuttVars[] = {
+   ** .pp
+   ** Should the sidebar shorten the path showed.
+   */
++  { "sidebar_sort", DT_BOOL, R_BOTH, OPTSIDEBARSORT, 0 },
++  /*
++  ** .pp
++  ** Should the sidebar be sorted.
++  */
+   { "pgp_use_gpg_agent", DT_BOOL, R_NONE, OPTUSEGPGAGENT, 0},
+   /*
+   ** .pp
+diff --git a/mutt.h b/mutt.h
+index b9bf895..0ed1b8e 100644
+--- a/mutt.h
++++ b/mutt.h
+@@ -421,6 +421,7 @@ enum
+   OPTSCORE,
+   OPTSIDEBAR,
+   OPTSIDEBARSHORTPATH,
++  OPTSIDEBARSORT,
+   OPTSIGDASHES,
+   OPTSIGONTOP,
+   OPTSORTRE,
+diff --git a/sidebar.c b/sidebar.c
+index 94127bb..893f69e 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -54,6 +54,35 @@ void calc_boundaries (int menu)
+ 	for ( ; tmp->next != 0; tmp = tmp->next )
+ 		tmp->next->prev = tmp;
+ 
++	if (option(OPTSIDEBARSORT)) {
++		int needsort=1;
++		BUFFY *prev;
++		BUFFY *next;
++		BUFFY *tmp2;
++		while (needsort==1) {
++			needsort=0;
++			tmp = Incoming;
++			for ( ; tmp ; tmp=tmp->next ) {
++				if (tmp->next != NULL && strcoll(tmp->path, tmp->next->path) > 0) {
++					needsort=1;
++					prev = tmp->prev;
++					next = tmp->next;
++					if (prev != NULL)
++						prev->next = next;
++					else
++						Incoming = next;
++					next->prev = prev;
++					tmp2 = next->next;
++					next->next = tmp;
++					tmp->prev = next;
++					tmp->next = tmp2;
++					if (tmp2 != NULL)
++						tmp2->prev = tmp;
++				}
++			}
++		}
++	}
++
+ 	if ( TopBuffy == 0 && BottomBuffy == 0 )
+ 		TopBuffy = Incoming;
+ 	if ( BottomBuffy == 0 ) {
+-- 
+1.7.7.3
+

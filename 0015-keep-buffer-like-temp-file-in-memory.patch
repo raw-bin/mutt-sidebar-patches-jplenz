@@ -1,0 +1,195 @@
+From 3776d7d28624f0761edc5f8d4956af2c62cf1dc1 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Wed, 5 Oct 2011 18:27:17 +0200
+Subject: [PATCH 15/19] keep buffer-like temp file in memory
+
+When searching the header or body for strings and the `thorough_search'
+option is set, a temp file was created, parsed, and then unlinked again.
+This is now done in memory using glibc's open_memstream() and
+fmemopen() if they are available.
+
+This is a bit hackish, but might increase performance greatly. YMMV.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ configure.ac |    2 ++
+ handler.c    |   29 +++++++++++++++++++++++++++++
+ pattern.c    |   38 ++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 69 insertions(+), 0 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 5a8c7f0..91964c1 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1289,6 +1289,8 @@ if test $mutt_cv_langinfo_yesexpr = yes; then
+   AC_DEFINE(HAVE_LANGINFO_YESEXPR,1,[ Define if you have <langinfo.h> and nl_langinfo(YESEXPR). ])
+ fi
+ 
++AC_CHECK_FUNCS(fmemopen open_memstream)
++
+ dnl Documentation tools
+ have_openjade="no"
+ AC_PATH_PROG([OSPCAT], [ospcat], [none])
+diff --git a/handler.c b/handler.c
+index a45fbab..13162a1 100644
+--- a/handler.c
++++ b/handler.c
+@@ -1525,6 +1525,11 @@ int mutt_body_handler (BODY *b, STATE *s)
+   char type[STRING];
+   int rc = 0;
+ 
++#ifdef HAVE_FMEMOPEN
++  char *temp;
++  size_t tempsize;
++#endif
++
+   int oflags = s->flags;
+   
+   /* first determine which handler to use to process this part */
+@@ -1644,6 +1649,14 @@ int mutt_body_handler (BODY *b, STATE *s)
+       {
+ 	/* decode to a tempfile, saving the original destination */
+ 	fp = s->fpout;
++#ifdef HAVE_FMEMOPEN
++	if ((s->fpout = open_memstream(&temp, &tempsize)) == NULL)
++	{
++	  mutt_error _("Unable to open memory stream!");
++	  dprint (1, (debugfile, "Can't open memory stream.\n"));
++	  goto bail;
++	}
++#else
+ 	mutt_mktemp (tempfile, sizeof (tempfile));
+ 	if ((s->fpout = safe_fopen (tempfile, "w")) == NULL)
+ 	{
+@@ -1651,6 +1664,7 @@ int mutt_body_handler (BODY *b, STATE *s)
+ 	  dprint (1, (debugfile, "Can't open %s.\n", tempfile));
+ 	  goto bail;
+ 	}
++#endif
+ 	/* decoding the attachment changes the size and offset, so save a copy
+ 	 * of the "real" values now, and restore them after processing
+ 	 */
+@@ -1679,8 +1693,19 @@ int mutt_body_handler (BODY *b, STATE *s)
+ 	/* restore final destination and substitute the tempfile for input */
+ 	s->fpout = fp;
+ 	fp = s->fpin;
++#ifdef HAVE_FMEMOPEN
++	if(tempsize)
++		s->fpin = fmemopen(temp, tempsize, "r");
++	else /* fmemopen cannot handle zero-length buffers */
++		s->fpin = safe_fopen ("/dev/null", "r");
++	if(s->fpin == NULL) {
++		mutt_perror("failed to re-open memstream!");
++		return (-1);
++	}
++#else
+ 	s->fpin = fopen (tempfile, "r");
+ 	unlink (tempfile);
++#endif
+ 
+ 	/* restore the prefix */
+ 	s->prefix = savePrefix;
+@@ -1706,6 +1731,10 @@ int mutt_body_handler (BODY *b, STATE *s)
+ 
+ 	/* restore the original source stream */
+ 	safe_fclose (&s->fpin);
++#ifdef HAVE_FMEMOPEN
++	if(tempsize)
++	    FREE(&temp);
++#endif
+ 	s->fpin = fp;
+       }
+     }
+diff --git a/pattern.c b/pattern.c
+index dbd73bd..d9ccfbc 100644
+--- a/pattern.c
++++ b/pattern.c
+@@ -154,6 +154,10 @@ msg_search (CONTEXT *ctx, pattern_t* pat, int msgno)
+   HEADER *h = ctx->hdrs[msgno];
+   char *buf;
+   size_t blen;
++#ifdef HAVE_FMEMOPEN
++  char *temp;
++  size_t tempsize;
++#endif
+ 
+   if ((msg = mx_open_message (ctx, msgno)) != NULL)
+   {
+@@ -163,12 +167,20 @@ msg_search (CONTEXT *ctx, pattern_t* pat, int msgno)
+       memset (&s, 0, sizeof (s));
+       s.fpin = msg->fp;
+       s.flags = M_CHARCONV;
++#ifdef HAVE_FMEMOPEN
++      if((s.fpout = open_memstream(&temp, &tempsize)) == NULL)
++      {
++	mutt_perror ("Error opening memstream");
++	return (0);
++      }
++#else
+       mutt_mktemp (tempfile, sizeof (tempfile));
+       if ((s.fpout = safe_fopen (tempfile, "w+")) == NULL)
+       {
+ 	mutt_perror (tempfile);
+ 	return (0);
+       }
++#endif
+ 
+       if (pat->op != M_BODY)
+ 	mutt_copy_header (msg->fp, h, s.fpout, CH_FROM | CH_DECODE, NULL);
+@@ -184,7 +196,11 @@ msg_search (CONTEXT *ctx, pattern_t* pat, int msgno)
+ 	  if (s.fpout)
+ 	  {
+ 	    safe_fclose (&s.fpout);
++#ifdef HAVE_FMEMOPEN
++            FREE(&temp);
++#else
+ 	    unlink (tempfile);
++#endif
+ 	  }
+ 	  return (0);
+ 	}
+@@ -193,11 +209,28 @@ msg_search (CONTEXT *ctx, pattern_t* pat, int msgno)
+ 	mutt_body_handler (h->content, &s);
+       }
+ 
++#ifdef HAVE_FMEMOPEN
++      fclose(s.fpout);
++      lng = tempsize;
++
++      if(tempsize) {
++          if ((fp = fmemopen(temp, tempsize, "r")) == NULL) {
++            mutt_perror ("Error re-opening memstream");
++            return (0);
++          }
++      } else { /* fmemopen cannot handle empty buffers */
++          if ((fp = safe_fopen ("/dev/null", "r")) == NULL) {
++            mutt_perror ("Error opening /dev/null");
++            return (0);
++          }
++      }
++#else
+       fp = s.fpout;
+       fflush (fp);
+       fseek (fp, 0, 0);
+       fstat (fileno (fp), &st);
+       lng = (long) st.st_size;
++#endif
+     }
+     else
+     {
+@@ -244,7 +277,12 @@ msg_search (CONTEXT *ctx, pattern_t* pat, int msgno)
+     if (option (OPTTHOROUGHSRC))
+     {
+       safe_fclose (&fp);
++#ifdef HAVE_FMEMOPEN
++      if(tempsize)
++          FREE (&temp);
++#else
+       unlink (tempfile);
++#endif
+     }
+   }
+ 
+-- 
+1.7.7.3
+

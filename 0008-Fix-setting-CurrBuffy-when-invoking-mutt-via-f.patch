@@ -1,0 +1,28 @@
+From 5b515a14817e4e5048cfcb5fb08c63bc2ac834f4 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Fri, 28 Oct 2011 15:18:33 +0200
+Subject: [PATCH 08/19] Fix setting CurrBuffy when invoking mutt via -f
+
+Previously, calling `mutt -f=test' wouldn't mark the =test mailbox as
+"current" in the sidebar.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ main.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/main.c b/main.c
+index 0952c93..3d6d1f0 100644
+--- a/main.c
++++ b/main.c
+@@ -1017,6 +1017,7 @@ int main (int argc, char **argv)
+     if((Context = mx_open_mailbox (folder, ((flags & M_RO) || option (OPTREADONLY)) ? M_READONLY : 0, NULL))
+        || !explicit_folder)
+     {
++      set_curbuffy(folder);
+       mutt_index_menu ();
+       if (Context)
+ 	FREE (&Context);
+-- 
+1.7.7.3
+

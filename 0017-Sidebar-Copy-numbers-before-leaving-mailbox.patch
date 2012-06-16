@@ -1,0 +1,54 @@
+From c0b440966a6d2af29dd90364f644f39a243cedba Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Wed, 30 Nov 2011 12:55:33 +0100
+Subject: [PATCH 17/19] Sidebar: Copy numbers before leaving mailbox
+
+Previously, the sidebar would not honor a change in the number of mails
+when some mails were deleted by an implicit sync (ie., by changing to
+another mailbox).
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ mx.c      |    4 ++++
+ sidebar.c |    3 ++-
+ 2 files changed, 6 insertions(+), 1 deletions(-)
+
+diff --git a/mx.c b/mx.c
+index 4dc286a..24ffe2e 100644
+--- a/mx.c
++++ b/mx.c
+@@ -734,6 +734,8 @@ void mx_fastclose_mailbox (CONTEXT *ctx)
+   mutt_clear_threads (ctx);
+   for (i = 0; i < ctx->msgcount; i++)
+     mutt_free_header (&ctx->hdrs[i]);
++  ctx->msgcount -= ctx->deleted;
++  set_buffystats(ctx);
+   FREE (&ctx->hdrs);
+   FREE (&ctx->v2r);
+   FREE (&ctx->path);
+@@ -827,6 +829,8 @@ int mx_close_mailbox (CONTEXT *ctx, int *index_hint)
+     if (!ctx->hdrs[i]->deleted && ctx->hdrs[i]->read 
+         && !(ctx->hdrs[i]->flagged && option (OPTKEEPFLAGGED)))
+       read_msgs++;
++    if (ctx->hdrs[i]->deleted && !ctx->hdrs[i]->read)
++      ctx->unread--;
+   }
+ 
+   if (read_msgs && quadoption (OPT_MOVE) != M_NO)
+diff --git a/sidebar.c b/sidebar.c
+index 0d8dcf3..4ce9097 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -387,7 +387,8 @@ void set_buffystats(CONTEXT* Context)
+ {
+         BUFFY *tmp = Incoming;
+         while(tmp) {
+-                if(Context && !strcmp(tmp->path, Context->path)) {
++                if(Context && (!strcmp(tmp->path, Context->path) ||
++                               !strcmp(tmp->realpath, Context->path))) {
+ 			tmp->msg_unread = Context->unread;
+ 			tmp->msgcount = Context->msgcount;
+                         break;
+-- 
+1.7.7.3
+

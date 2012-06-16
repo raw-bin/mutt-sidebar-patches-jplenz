@@ -1,0 +1,221 @@
+From 7d7c9a8b8e38eb5147fac4fe0a647671582ab536 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Wed, 26 Oct 2011 18:34:00 +0200
+Subject: [PATCH 13/19] introduce sidebar_format option
+
+This enables a far more flexible approach to customizing the sidebar
+format, plus it is a lot cleaner and more consistent with other mutt
+options.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ globals.h |    1 +
+ init.h    |   10 +++++
+ protos.h  |    7 +++
+ sidebar.c |  130 ++++++++++++++++++++++++++++++++++++++++++-------------------
+ 4 files changed, 108 insertions(+), 40 deletions(-)
+
+diff --git a/globals.h b/globals.h
+index ced77ce..8a207ed 100644
+--- a/globals.h
++++ b/globals.h
+@@ -118,6 +118,7 @@ WHERE char *SendCharset;
+ WHERE char *Sendmail;
+ WHERE char *Shell;
+ WHERE char *SidebarDelim;
++WHERE char *SidebarFormat;
+ WHERE char *Signature;
+ WHERE char *SimpleSearch;
+ #if USE_SMTP
+diff --git a/init.h b/init.h
+index 4c81e41..3bad608 100644
+--- a/init.h
++++ b/init.h
+@@ -1979,6 +1979,16 @@ struct option_t MuttVars[] = {
+   ** .pp
+   ** Should the sidebar be sorted.
+   */
++  {"sidebar_format", DT_STR, R_NONE, UL &SidebarFormat, UL "%B%?F? [%F]?%* %?N?%N/?%4S"},
++  /*
++  ** .pp
++  ** Format string for the sidebar. The sequences `%N', `%F' and `%S'
++  ** will be replaced by the number of new or flagged messages or the total
++  ** size of them mailbox. `%B' will be replaced with the name of the mailbox.
++  ** The `%!' sequence will be expanded to `!' if there is one flagged message;
++  ** to `!!' if there are two flagged messages; and to `n!' for n flagged
++  ** messages, n>2.
++  */
+   { "pgp_use_gpg_agent", DT_BOOL, R_NONE, OPTUSEGPGAGENT, 0},
+   /*
+   ** .pp
+diff --git a/protos.h b/protos.h
+index 12e4969..b9d18b3 100644
+--- a/protos.h
++++ b/protos.h
+@@ -36,6 +36,13 @@ struct hdr_format_info
+   const char *pager_progress;
+ };
+ 
++struct sidebar_entry {
++    char                box[SHORT_STRING];
++    unsigned int        size;
++    unsigned int        new;
++    unsigned int        flagged;
++};
++
+ void mutt_make_string_info (char *, size_t, const char *, struct hdr_format_info *, format_flag);
+ 
+ int mutt_extract_token (BUFFER *, BUFFER *, int);
+diff --git a/sidebar.c b/sidebar.c
+index b316379..0c8e296 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -36,16 +36,9 @@ static BUFFY *TopBuffy = 0;
+ static BUFFY *BottomBuffy = 0;
+ static int known_lines = 0;
+ 
+-static int quick_log10(int n)
+-{
+-        char string[32];
+-        sprintf(string, "%d", n);
+-        return strlen(string);
+-}
++void calc_boundaries() {
+ 
+-void calc_boundaries (int menu)
+-{
+-	BUFFY *tmp = Incoming;
++    BUFFY *tmp = Incoming;
+ 
+ 	int count = LINES - 2 - (option(OPTHELP) ? 1 : 0);
+ 
+@@ -108,38 +101,95 @@ void calc_boundaries (int menu)
+ 	}
+ }
+ 
+-char *make_sidebar_entry(char *box, int size, int new, int flagged)
++static const char *
++sidebar_format_str (char *dest,
++			size_t destlen,
++			size_t col,
++			char op,
++			const char *src,
++			const char *prefix,
++			const char *ifstring,
++			const char *elsestring,
++			unsigned long data,
++			format_flag flags)
+ {
+-	static char *entry = 0;
+-	char *c;
+-	int i = 0;
+-	int delim_len = strlen(SidebarDelim);
+-
+-	c = realloc(entry, SidebarWidth - delim_len + 2);
+-	if ( c ) entry = c;
+-	entry[SidebarWidth - delim_len + 1] = 0;
+-	for (; i < SidebarWidth - delim_len + 1; entry[i++] = ' ' );
+-	i = strlen(box);
+-	strncpy( entry, box, i < (SidebarWidth - delim_len + 1) ? i : (SidebarWidth - delim_len + 1) );
+-
+-        if (size == -1)
+-                sprintf(entry + SidebarWidth - delim_len - 3, "?");
+-        else if ( new ) {
+-          if (flagged > 0) {
+-              sprintf(
+-		        entry + SidebarWidth - delim_len - 5 - quick_log10(size) - quick_log10(new) - quick_log10(flagged),
+-		        "% d(%d)[%d]", size, new, flagged);
+-          } else {
+-              sprintf(
+-                      entry + SidebarWidth - delim_len - 3 - quick_log10(size) - quick_log10(new),
+-                      "% d(%d)", size, new);
+-          }
+-        } else if (flagged > 0) {
+-              sprintf( entry + SidebarWidth - delim_len - 3 - quick_log10(size) - quick_log10(flagged), "% d[%d]", size, flagged);
+-        } else {
+-              sprintf( entry + SidebarWidth - delim_len - 1 - quick_log10(size), "% d", size);
+-        }
+-	return entry;
++/* casting from unsigned long - srsly?! */
++struct sidebar_entry *sbe = (struct sidebar_entry *) data;
++unsigned int optional;
++char fmt[SHORT_STRING], buf[SHORT_STRING];
++
++optional = flags & M_FORMAT_OPTIONAL;
++
++switch(op) {
++	case 'F':
++		if(!optional) {
++			snprintf (fmt, sizeof (fmt), "%%%sd", prefix);
++			snprintf (dest, destlen, fmt, sbe->flagged);
++		} else if(sbe->flagged == 0) {
++			optional = 0;
++		}
++		break;
++
++	case '!':
++		if(sbe->flagged == 0)
++			mutt_format_s(dest, destlen, prefix, "");
++		if(sbe->flagged == 1)
++			mutt_format_s(dest, destlen, prefix, "!");
++		if(sbe->flagged == 2)
++			mutt_format_s(dest, destlen, prefix, "!!");
++		if(sbe->flagged > 2) {
++			snprintf (buf, sizeof (buf), "%d!", sbe->flagged);
++			mutt_format_s(dest, destlen, prefix, buf);
++		}
++		break;
++
++	case 'S':
++		snprintf (fmt, sizeof (fmt), "%%%sd", prefix);
++		snprintf (dest, destlen, fmt, sbe->size);
++		break;
++
++	case 'N':
++		if(!optional) {
++			snprintf (fmt, sizeof (fmt), "%%%sd", prefix);
++			snprintf (dest, destlen, fmt, sbe->new);
++		} else if(sbe->new == 0) {
++			optional = 0;
++		}
++		break;
++
++	case 'B':
++		mutt_format_s(dest, destlen, prefix, sbe->box);
++		break;
++	}
++
++	if(optional)
++		mutt_FormatString (dest, destlen, col, ifstring, sidebar_format_str, (unsigned long) sbe, flags);
++	else if (flags & M_FORMAT_OPTIONAL)
++		mutt_FormatString (dest, destlen, col, elsestring, sidebar_format_str, (unsigned long) sbe, flags);
++
++	return (src);
++}
++
++char *make_sidebar_entry(char *box, unsigned int size, unsigned int new, unsigned int flagged) {
++    static char *entry = 0;
++    struct sidebar_entry sbe;
++    int SBvisual;
++
++    SBvisual = SidebarWidth - strlen(SidebarDelim);
++    if (SBvisual < 1)
++        return NULL;
++
++    sbe.new = new;
++    sbe.flagged = flagged;
++    sbe.size = size;
++    strncpy(sbe.box, box, 31);
++
++    safe_realloc(&entry, SBvisual + 2);
++    entry[SBvisual + 1] = '\0';
++
++    mutt_FormatString (entry, SBvisual+1, 0, SidebarFormat, sidebar_format_str, (unsigned long) &sbe, 0);
++
++    return entry;
+ }
+ 
+ void set_curbuffy(char buf[LONG_STRING])
+-- 
+1.7.7.3
+

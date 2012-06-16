@@ -1,0 +1,60 @@
+From bd2d73fe668ca3d335e064508474661c9122a4b4 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Fri, 28 Oct 2011 15:35:28 +0200
+Subject: [PATCH 14/19] introduce sidebar_folderindent option
+
+Thus it is possible to disable the (IMHO) completely unnecessary (and
+faulty) indentation. Consequently, the option is set to "no" by default.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ init.h    |    6 ++++++
+ mutt.h    |    1 +
+ sidebar.c |    2 +-
+ 3 files changed, 8 insertions(+), 1 deletions(-)
+
+diff --git a/init.h b/init.h
+index 3bad608..df13e98 100644
+--- a/init.h
++++ b/init.h
+@@ -1989,6 +1989,12 @@ struct option_t MuttVars[] = {
+   ** to `!!' if there are two flagged messages; and to `n!' for n flagged
+   ** messages, n>2.
+   */
++  { "sidebar_folderindent", DT_BOOL, R_BOTH, OPTSIDEBARFOLDERINDENT, 0 },
++  /*
++  ** .pp
++  ** Should folders be indented in the sidebar.
++  */
++
+   { "pgp_use_gpg_agent", DT_BOOL, R_NONE, OPTUSEGPGAGENT, 0},
+   /*
+   ** .pp
+diff --git a/mutt.h b/mutt.h
+index 0ed1b8e..f598b4a 100644
+--- a/mutt.h
++++ b/mutt.h
+@@ -422,6 +422,7 @@ enum
+   OPTSIDEBAR,
+   OPTSIDEBARSHORTPATH,
+   OPTSIDEBARSORT,
++  OPTSIDEBARFOLDERINDENT,
+   OPTSIGDASHES,
+   OPTSIGONTOP,
+   OPTSORTRE,
+diff --git a/sidebar.c b/sidebar.c
+index 0c8e296..9cd6ba3 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -340,7 +340,7 @@ int draw_sidebar(int menu) {
+ 		int sidebar_folder_depth = 0;
+ 		char *sidebar_folder_name;
+ 		sidebar_folder_name = mutt_basename(tmp->path);
+-		if ( maildir_is_prefix ) {
++		if ( maildir_is_prefix && option(OPTSIDEBARFOLDERINDENT) ) {
+ 			char *tmp_folder_name;
+ 			int i;
+ 			tmp_folder_name = tmp->path + strlen(Maildir);
+-- 
+1.7.7.3
+

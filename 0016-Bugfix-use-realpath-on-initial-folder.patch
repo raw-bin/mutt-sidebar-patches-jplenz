@@ -1,0 +1,101 @@
+From 9e862aa5ce37c0be43c6e1108174f45c07230e69 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Wed, 30 Nov 2011 12:43:52 +0100
+Subject: [PATCH 16/19] Bugfix: use realpath() on initial folder
+
+Buffy does this; thus, if you want your ~//INBOX to be the same as
+~/INBOX (which it is, of course), you need to realpath() it first.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ buffy.c   |    8 ++++++--
+ buffy.h   |    1 +
+ main.c    |    7 +++++++
+ sidebar.c |    5 +++--
+ 4 files changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/buffy.c b/buffy.c
+index 088927f..fa76a49 100644
+--- a/buffy.c
++++ b/buffy.c
+@@ -196,9 +196,13 @@ void mutt_update_mailbox (BUFFY * b)
+ static BUFFY *buffy_new (const char *path)
+ {
+   BUFFY* buffy;
++  char rp[PATH_MAX];
++  char *r;
+ 
+   buffy = (BUFFY *) safe_calloc (1, sizeof (BUFFY));
+   strfcpy (buffy->path, path, sizeof (buffy->path));
++  r = realpath(path, rp);
++  strfcpy (buffy->realpath, r ? rp : path, sizeof (buffy->realpath));
+   buffy->next = NULL;
+   buffy->magic = 0;
+ 
+@@ -243,8 +247,8 @@ int mutt_parse_mailboxes (BUFFER *path, BUFFER *s, unsigned long data, BUFFER *e
+     p = realpath (buf, f1);
+     for (tmp = &Incoming; *tmp; tmp = &((*tmp)->next))
+     {
+-      q = realpath ((*tmp)->path, f2);
+-      if (mutt_strcmp (p ? p : buf, q ? q : (*tmp)->path) == 0)
++      q = (*tmp)->realpath;
++      if (mutt_strcmp (p ? p : buf, q) == 0)
+       {
+ 	dprint(3,(debugfile,"mailbox '%s' already registered as '%s'\n", buf, (*tmp)->path));
+ 	break;
+diff --git a/buffy.h b/buffy.h
+index 0427301..8c203e1 100644
+--- a/buffy.h
++++ b/buffy.h
+@@ -23,6 +23,7 @@
+ typedef struct buffy_t
+ {
+   char path[_POSIX_PATH_MAX];
++  char realpath[_POSIX_PATH_MAX];
+   off_t size;
+   struct buffy_t *next;
+   struct buffy_t *prev;
+diff --git a/main.c b/main.c
+index 3d6d1f0..9567bdb 100644
+--- a/main.c
++++ b/main.c
+@@ -995,6 +995,13 @@ int main (int argc, char **argv)
+       strfcpy (folder, NONULL(Spoolfile), sizeof (folder));
+     mutt_expand_path (folder, sizeof (folder));
+ 
++    {
++      char tmpfolder[_POSIX_PATH_MAX];
++      strfcpy (tmpfolder, folder, sizeof (tmpfolder));
++      if(!realpath(tmpfolder, folder))
++          strfcpy (folder, tmpfolder, sizeof (tmpfolder));
++    }
++
+     mutt_str_replace (&CurrentFolder, folder);
+     mutt_str_replace (&LastFolder, folder);
+ 
+diff --git a/sidebar.c b/sidebar.c
+index 9cd6ba3..0d8dcf3 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -200,7 +200,7 @@ void set_curbuffy(char buf[LONG_STRING])
+     return;
+ 
+   while(1) {
+-    if(!strcmp(tmp->path, buf)) {
++    if(!strcmp(tmp->path, buf) || !strcmp(tmp->realpath, buf)) {
+       CurBuffy = tmp;
+       break;
+     }
+@@ -326,7 +326,8 @@ int draw_sidebar(int menu) {
+ 			SETCOLOR(MT_COLOR_NORMAL);
+ 
+ 		move( lines, 0 );
+-		if ( Context && !strcmp( tmp->path, Context->path ) ) {
++		if ( Context && (!strcmp(tmp->path, Context->path)||
++				 !strcmp(tmp->realpath, Context->path)) ) {
+ 			tmp->msg_unread = Context->unread;
+ 			tmp->msgcount = Context->msgcount;
+ 			tmp->msg_flagged = Context->flagged;
+-- 
+1.7.7.3
+

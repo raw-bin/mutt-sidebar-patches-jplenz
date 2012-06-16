@@ -1,0 +1,56 @@
+From 2c58c201e1a6d0f24ba20e9b105cb04f60a56d87 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Thu, 19 Jan 2012 13:33:49 +0100
+Subject: [PATCH] use PATH_MAX instead of _POSIX_PATH_MAX when realpath()ing
+
+From realpath(2):
+
+    Otherwise, if PATH_MAX is defined as a constant in the <limits.h>
+    header, then the generated pathname shall be stored as a
+    null-terminated string, up to a maximum of PATH_MAX bytes, in the
+    buffer pointed to by resolved_name.
+
+PATH_MAX is required to be at least as big as _POSIX_PATH_MAX (= 255).
+Usually, PATH_MAX = 4096, however.
+
+Thanks to Jakob Matthes, who noticed that mutt would crash when compiled
+with _FORTIFY_SOURCE=2.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ main.c |    5 +++--
+ 1 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/main.c b/main.c
+index 9567bdb..9543506 100644
+--- a/main.c
++++ b/main.c
+@@ -50,6 +50,7 @@
+ #include <unistd.h>
+ #include <errno.h>
+ #include <sys/stat.h>
++#include <limits.h>
+ #include <sys/utsname.h>
+ 
+ #ifdef HAVE_GETOPT_H
+@@ -525,7 +526,7 @@ init_extended_keys();
+ 
+ int main (int argc, char **argv)
+ {
+-  char folder[_POSIX_PATH_MAX] = "";
++  char folder[PATH_MAX] = "";
+   char *subject = NULL;
+   char *includeFile = NULL;
+   char *draftFile = NULL;
+@@ -996,7 +997,7 @@ int main (int argc, char **argv)
+     mutt_expand_path (folder, sizeof (folder));
+ 
+     {
+-      char tmpfolder[_POSIX_PATH_MAX];
++      char tmpfolder[PATH_MAX];
+       strfcpy (tmpfolder, folder, sizeof (tmpfolder));
+       if(!realpath(tmpfolder, folder))
+           strfcpy (folder, tmpfolder, sizeof (tmpfolder));
+-- 
+1.7.7.3-zedat
+

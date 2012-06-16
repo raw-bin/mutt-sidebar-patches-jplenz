@@ -1,0 +1,40 @@
+From e34bbcbaf7e1fd89bb49f9b3b2a481d2497ea5ca Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Fri, 6 Jan 2012 15:36:03 +0100
+Subject: [PATCH 19/19] Copy number of flagged messages when leaving mbox
+
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ mx.c      |    2 ++
+ sidebar.c |    1 +
+ 2 files changed, 3 insertions(+), 0 deletions(-)
+
+diff --git a/mx.c b/mx.c
+index 6903559..6189e71 100644
+--- a/mx.c
++++ b/mx.c
+@@ -832,6 +832,8 @@ int mx_close_mailbox (CONTEXT *ctx, int *index_hint)
+       read_msgs++;
+     if (ctx->hdrs[i]->deleted && !ctx->hdrs[i]->read)
+       ctx->unread--;
++    if (ctx->hdrs[i]->deleted && ctx->hdrs[i]->flagged)
++      ctx->flagged--;
+   }
+ 
+   if (read_msgs && quadoption (OPT_MOVE) != M_NO)
+diff --git a/sidebar.c b/sidebar.c
+index 4ce9097..83ec2c2 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -391,6 +391,7 @@ void set_buffystats(CONTEXT* Context)
+                                !strcmp(tmp->realpath, Context->path))) {
+ 			tmp->msg_unread = Context->unread;
+ 			tmp->msgcount = Context->msgcount;
++			tmp->msg_flagged = Context->flagged;
+                         break;
+                 }
+                 tmp = tmp->next;
+-- 
+1.7.7.3
+

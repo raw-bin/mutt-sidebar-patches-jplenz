@@ -1,0 +1,128 @@
+From 9a393e586ceb9c84abd6be69877134b3a5e72766 Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Mon, 24 Oct 2011 19:09:29 +0200
+Subject: [PATCH 09/19] cache time when sidebar last counted all the mails
+
+This introduces a member `sb_last_checked' to the BUFFY struct. It will
+be set by `mh_buffy_update', `buffy_maildir_update' and
+`buffy_mbox_update' when they count all the mails.
+
+Mboxes only: `buffy_mbox_update' will not be run unless the condition
+"sb_last_checked > mtime of the file" holds. This solves a huge
+performance penalty you obtain with big mailboxes. The `mx_open_mailbox'
+call with the M_PEEK flag will *reset* mtime and atime to the values
+from before. Thus, you cannot rely on "mtime > atime" to check whether
+or not to count new mail.
+
+NOTE: There might be ways to optimize MH and Maildir access, too. I'm
+not familiar with the formats, though.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ buffy.c |   11 ++++++++---
+ buffy.h |    1 +
+ mh.c    |    3 ++-
+ mx.h    |    2 +-
+ 4 files changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/buffy.c b/buffy.c
+index 5f90a45..3c3d462 100644
+--- a/buffy.c
++++ b/buffy.c
+@@ -399,6 +399,7 @@ void buffy_maildir_update (BUFFY* mailbox)
+     }
+   }
+ 
++  mailbox->sb_last_checked = time(NULL);
+   closedir (dirp);
+ }
+ 
+@@ -434,16 +435,20 @@ static int buffy_mbox_hasnew (BUFFY* mailbox, struct stat *sb)
+ }
+ 
+ /* update message counts for the sidebar */
+-void buffy_mbox_update (BUFFY* mailbox)
++void buffy_mbox_update (BUFFY* mailbox, struct stat *sb)
+ {
+   CONTEXT *ctx = NULL;
+ 
++  if(mailbox->sb_last_checked > sb->st_mtime && mailbox->msgcount != 0)
++      return; /* no check necessary */
++
+   ctx = mx_open_mailbox(mailbox->path, M_READONLY | M_QUIET | M_NOSORT | M_PEEK, NULL);
+   if(ctx)
+   {
+     mailbox->msgcount = ctx->msgcount;
+     mailbox->msg_unread = ctx->unread;
+     mailbox->msg_flagged = ctx->flagged;
++    mailbox->sb_last_checked = time(NULL);
+     mx_close_mailbox(ctx, 0);
+   }
+ }
+@@ -521,7 +526,7 @@ int mutt_buffy_check (int force)
+       {
+       case M_MBOX:
+       case M_MMDF:
+-	buffy_mbox_update (tmp);
++	buffy_mbox_update (tmp, &sb);
+ 	if (buffy_mbox_hasnew (tmp, &sb) > 0)
+ 	  BuffyCount++;
+ 	break;
+@@ -533,7 +538,7 @@ int mutt_buffy_check (int force)
+ 	break;
+ 
+       case M_MH:
+-	mh_buffy_update (tmp->path, &tmp->msgcount, &tmp->msg_unread, &tmp->msg_flagged);
++	mh_buffy_update (tmp->path, &tmp->msgcount, &tmp->msg_unread, &tmp->msg_flagged, &tmp->sb_last_checked);
+ 	if ((tmp->new = mh_buffy (tmp->path)) > 0)
+ 	  BuffyCount++;
+ 	break;
+diff --git a/buffy.h b/buffy.h
+index 7ad2ca2..0427301 100644
+--- a/buffy.h
++++ b/buffy.h
+@@ -34,6 +34,7 @@ typedef struct buffy_t
+   short magic;			/* mailbox type */
+   short newly_created;		/* mbox or mmdf just popped into existence */
+   time_t last_visited;		/* time of last exit from this mailbox */
++  time_t sb_last_checked;      /* time of last buffy check from sidebar */
+ }
+ BUFFY;
+ 
+diff --git a/mh.c b/mh.c
+index 6e52eb4..ecb929b 100644
+--- a/mh.c
++++ b/mh.c
+@@ -244,7 +244,7 @@ int mh_buffy (const char *path)
+   return r;
+ }
+ 
+-void mh_buffy_update (const char *path, int *msgcount, int *msg_unread, int *msg_flagged)
++void mh_buffy_update (const char *path, int *msgcount, int *msg_unread, int *msg_flagged, time_t *sb_last_checked)
+ {
+   int i;
+   struct mh_sequences mhs;
+@@ -264,6 +264,7 @@ void mh_buffy_update (const char *path, int *msgcount, int *msg_unread, int *msg
+     if (mhs_check (&mhs, i) & MH_SEQ_FLAGGED)
+       msg_flagged++;
+   mhs_free_sequences (&mhs);
++  *sb_last_checked = time(NULL);
+ }
+ 
+ static int mh_mkstemp (CONTEXT * dest, FILE ** fp, char **tgt)
+diff --git a/mx.h b/mx.h
+index d037aa0..a90577d 100644
+--- a/mx.h
++++ b/mx.h
+@@ -58,7 +58,7 @@ int mh_read_dir (CONTEXT *, const char *);
+ int mh_sync_mailbox (CONTEXT *, int *);
+ int mh_check_mailbox (CONTEXT *, int *);
+ int mh_buffy (const char *);
+-void mh_buffy_update (const char *, int *, int *, int *);
++void mh_buffy_update (const char *, int *, int *, int *, time_t *);
+ int mh_check_empty (const char *);
+ 
+ int maildir_read_dir (CONTEXT *);
+-- 
+1.7.7.3
+

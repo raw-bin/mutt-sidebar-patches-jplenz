@@ -1,0 +1,77 @@
+From c355d27c1ec39e4be10fd35851e7a73659e95803 Mon Sep 17 00:00:00 2001
+From: Heiko Schlichting <heiko@Waran.CIS.FU-Berlin.DE>
+Date: Sat, 5 Feb 2011 18:31:40 +0100
+Subject: [PATCH 05/19] Fix sidebar compilation errors on IRIX systems
+
+This fixes two small issues that make the sidebar patch fail to compile
+on IRIX systems. Also, it changes C++-style comment signs to regular C
+style ones.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ init.h    |    2 +-
+ sidebar.c |   12 ++++++------
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/init.h b/init.h
+index 4d58f7f..4c81e41 100644
+--- a/init.h
++++ b/init.h
+@@ -1953,7 +1953,7 @@ struct option_t MuttVars[] = {
+   ** not used.
+   ** (PGP only)
+   */
+-  {"sidebar_delim", DT_STR, R_BOTH, UL &SidebarDelim, "|"},
++  {"sidebar_delim", DT_STR, R_BOTH, UL &SidebarDelim, UL "|"},
+   /*
+   ** .pp
+   ** This specifies the delimiter between the sidebar (if visible) and 
+diff --git a/sidebar.c b/sidebar.c
+index 893f69e..1e903ef 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -199,7 +199,7 @@ int draw_sidebar(int menu) {
+         }
+ 
+ 
+-//	if ( SidebarWidth == 0 ) return 0;
++       /* if ( SidebarWidth == 0 ) return 0; */
+        if (SidebarWidth > 0 && option (OPTSIDEBAR)
+            && delim_len >= SidebarWidth) {
+          unset_option (OPTSIDEBAR);
+@@ -273,15 +273,15 @@ int draw_sidebar(int menu) {
+ 			tmp->msgcount = Context->msgcount;
+ 			tmp->msg_flagged = Context->flagged;
+ 		}
+-		// check whether Maildir is a prefix of the current folder's path
++		/* check whether Maildir is a prefix of the current folder's path */
+ 		short maildir_is_prefix = 0;
+ 		if ( (strlen(tmp->path) > strlen(Maildir)) &&
+ 			(strncmp(Maildir, tmp->path, strlen(Maildir)) == 0) )
+         		maildir_is_prefix = 1;
+-		// calculate depth of current folder and generate its display name with indented spaces
++		/* calculate depth of current folder and generate its display name with indented spaces */
+ 		int sidebar_folder_depth = 0;
+ 		char *sidebar_folder_name;
+-		sidebar_folder_name = basename(tmp->path);
++		sidebar_folder_name = mutt_basename(tmp->path);
+ 		if ( maildir_is_prefix ) {
+ 			char *tmp_folder_name;
+ 			int i;
+@@ -299,11 +299,11 @@ int draw_sidebar(int menu) {
+  				}
+  				else
+  					tmp_folder_name = tmp->path;
+- 				sidebar_folder_name = malloc(strlen(basename(tmp_folder_name)) + sidebar_folder_depth + 1);
++				sidebar_folder_name = malloc(strlen(mutt_basename(tmp_folder_name)) + sidebar_folder_depth + 1);
+ 				for (i=0; i < sidebar_folder_depth; i++)
+ 					sidebar_folder_name[i]=' ';
+ 				sidebar_folder_name[i]=0;
+- 				strncat(sidebar_folder_name, basename(tmp_folder_name), strlen(basename(tmp_folder_name)) + sidebar_folder_depth);
++				strncat(sidebar_folder_name, mutt_basename(tmp_folder_name), strlen(mutt_basename(tmp_folder_name)) + sidebar_folder_depth);
+ 			}
+ 		}
+ 		printw( "%.*s", SidebarWidth - delim_len + 1,
+-- 
+1.7.7.3
+

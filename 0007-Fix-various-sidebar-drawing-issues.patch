@@ -1,0 +1,182 @@
+From 3cfc62d46e20bbe5b41785b295901905a8ac3f1b Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Wed, 26 Oct 2011 17:20:30 +0200
+Subject: [PATCH 07/19] Fix various sidebar drawing issues
+
+You can see fairly obvious quirks by setting
+
+    set pager_index_lines=7
+
+and then experimenting with setting and unsetting `status_on_top` and
+`help`.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ pager.c   |   23 +++++++++++++++++------
+ sidebar.c |   27 +++++++++++++++++----------
+ 2 files changed, 34 insertions(+), 16 deletions(-)
+
+diff --git a/pager.c b/pager.c
+index b38fb66..114b97e 100644
+--- a/pager.c
++++ b/pager.c
+@@ -1573,6 +1573,7 @@ mutt_pager (const char *banner, const char *fname, int flags, pager_t *extra)
+ 
+   int bodyoffset = 1;			/* offset of first line of real text */
+   int statusoffset = 0; 		/* offset for the status bar */
++  int statuswidth;
+   int helpoffset = LINES - 2;		/* offset for the help bar. */
+   int bodylen = LINES - 2 - bodyoffset; /* length of displayable area */
+ 
+@@ -1790,6 +1791,8 @@ mutt_pager (const char *banner, const char *fname, int flags, pager_t *extra)
+       hfi.ctx = Context;
+       hfi.pager_progress = pager_progress_str;
+ 
++      statuswidth = COLS - (option(OPTSTATUSONTOP) && PagerIndexLines > 0 ? SidebarWidth : 0);
++
+       if (last_pos < sb.st_size - 1)
+ 	snprintf(pager_progress_str, sizeof(pager_progress_str), OFF_T_FMT "%%", (100 * last_offset / sb.st_size));
+       else
+@@ -1798,22 +1801,29 @@ mutt_pager (const char *banner, const char *fname, int flags, pager_t *extra)
+       /* print out the pager status bar */
+       SETCOLOR (MT_COLOR_STATUS);
+       BKGDSET (MT_COLOR_STATUS);
+-      CLEARLINE_WIN (statusoffset);
++      if(option(OPTSTATUSONTOP) && PagerIndexLines > 0) {
++          CLEARLINE_WIN (statusoffset);
++      } else {
++          CLEARLINE (statusoffset);
++          DrawFullLine = 1; /* for mutt_make_string_info */
++      }
+ 
+       if (IsHeader (extra) || IsMsgAttach (extra))
+       {
+-	size_t l1 = (COLS-SidebarWidth) * MB_LEN_MAX;
++	size_t l1 = statuswidth * MB_LEN_MAX;
+ 	size_t l2 = sizeof (buffer);
+ 	hfi.hdr = (IsHeader (extra)) ? extra->hdr : extra->bdy->hdr;
+ 	mutt_make_string_info (buffer, l1 < l2 ? l1 : l2, NONULL (PagerFmt), &hfi, M_FORMAT_MAKEPRINT);
+-	mutt_paddstr (COLS-SidebarWidth, buffer);
++	mutt_paddstr (statuswidth, buffer);
+       }
+       else
+       {
+ 	char bn[STRING];
+ 	snprintf (bn, sizeof (bn), "%s (%s)", banner, pager_progress_str);
+-	mutt_paddstr (COLS-SidebarWidth, bn);
++	mutt_paddstr (statuswidth, bn);
+       }
++      if(!option(OPTSTATUSONTOP) || PagerIndexLines == 0)
++          DrawFullLine = 0; /* reset */
+       BKGDSET (MT_COLOR_NORMAL);
+       SETCOLOR (MT_COLOR_NORMAL);
+     }
+@@ -1828,10 +1838,11 @@ mutt_pager (const char *banner, const char *fname, int flags, pager_t *extra)
+       /* print out the index status bar */
+       menu_status_line (buffer, sizeof (buffer), index, NONULL(Status));
+  
+-      move (indexoffset + (option (OPTSTATUSONTOP) ? 0 : (indexlen - 1)), SidebarWidth);
++      move (indexoffset + (option (OPTSTATUSONTOP) ? 0 : (indexlen - 1)),
++          (option(OPTSTATUSONTOP) ? 0: SidebarWidth));
+       SETCOLOR (MT_COLOR_STATUS);
+       BKGDSET (MT_COLOR_STATUS);
+-      mutt_paddstr (COLS-SidebarWidth, buffer);
++      mutt_paddstr (COLS - (option(OPTSTATUSONTOP) ? 0 : SidebarWidth), buffer);
+       SETCOLOR (MT_COLOR_NORMAL);
+       BKGDSET (MT_COLOR_NORMAL);
+     }
+diff --git a/sidebar.c b/sidebar.c
+index 1e903ef..60bee73 100644
+--- a/sidebar.c
++++ b/sidebar.c
+@@ -47,6 +47,8 @@ void calc_boundaries (int menu)
+ {
+ 	BUFFY *tmp = Incoming;
+ 
++	int count = LINES - 2 - (option(OPTHELP) ? 1 : 0);
++
+ 	if ( known_lines != LINES ) {
+ 		TopBuffy = BottomBuffy = 0;
+ 		known_lines = LINES;
+@@ -86,13 +88,11 @@ void calc_boundaries (int menu)
+ 	if ( TopBuffy == 0 && BottomBuffy == 0 )
+ 		TopBuffy = Incoming;
+ 	if ( BottomBuffy == 0 ) {
+-		int count = LINES - 2 - (menu != MENU_PAGER || option(OPTSTATUSONTOP));
+ 		BottomBuffy = TopBuffy;
+ 		while ( --count && BottomBuffy->next )
+ 			BottomBuffy = BottomBuffy->next;
+ 	}
+ 	else if ( TopBuffy == CurBuffy->next ) {
+-		int count = LINES - 2 - (menu != MENU_PAGER);
+ 		BottomBuffy = CurBuffy;
+ 		tmp = BottomBuffy;
+ 		while ( --count && tmp->prev)
+@@ -100,7 +100,6 @@ void calc_boundaries (int menu)
+ 		TopBuffy = tmp;
+ 	}
+ 	else if ( BottomBuffy == CurBuffy->prev ) {
+-		int count = LINES - 2 - (menu != MENU_PAGER);
+ 		TopBuffy = CurBuffy;
+ 		tmp = TopBuffy;
+ 		while ( --count && tmp->next )
+@@ -165,8 +164,11 @@ void set_curbuffy(char buf[LONG_STRING])
+ 
+ int draw_sidebar(int menu) {
+ 
+-	int lines = option(OPTHELP) ? 1 : 0;
+-    lines += option(OPTSTATUSONTOP) ? 1 : 0;
++	int lines = 0;
++	int SidebarHeight;
++
++	if(option(OPTSTATUSONTOP) || option(OPTHELP))
++		lines++; /* either one will occupy the first line */
+ 
+ 	BUFFY *tmp;
+ #ifndef USE_SLANG_CURSES
+@@ -237,7 +239,11 @@ int draw_sidebar(int menu) {
+ 
+ 	/* draw the divider */
+ 
+-	for ( ; lines < LINES-1-(menu != MENU_PAGER || option(OPTSTATUSONTOP)); lines++ ) {
++	SidebarHeight =  LINES - 1;
++	if(option(OPTHELP) || !option(OPTSTATUSONTOP))
++		SidebarHeight--;
++
++	for ( ; lines < SidebarHeight; lines++ ) {
+ 		move(lines, SidebarWidth - delim_len);
+ 		addstr(NONULL(SidebarDelim));
+ #ifndef USE_SLANG_CURSES
+@@ -246,8 +252,9 @@ int draw_sidebar(int menu) {
+ 	}
+ 
+ 	if ( Incoming == 0 ) return 0;
+-	lines = option(OPTHELP) ? 1 : 0; /* go back to the top */
+-    lines += option(OPTSTATUSONTOP) ? 1 : 0;
++	lines = 0;
++	if(option(OPTSTATUSONTOP) || option(OPTHELP))
++		lines++; /* either one will occupy the first line */
+ 
+ 	if ( known_lines != LINES || TopBuffy == 0 || BottomBuffy == 0 ) 
+ 		calc_boundaries(menu);
+@@ -257,7 +264,7 @@ int draw_sidebar(int menu) {
+ 
+ 	SETCOLOR(MT_COLOR_NORMAL);
+ 
+-	for ( ; tmp && lines < LINES-1 - (menu != MENU_PAGER || option(OPTSTATUSONTOP)); tmp = tmp->next ) {
++	for ( ; tmp && lines < SidebarHeight; tmp = tmp->next ) {
+ 		if ( tmp == CurBuffy )
+ 			SETCOLOR(MT_COLOR_INDICATOR);
+ 		else if ( tmp->msg_unread > 0 )
+@@ -314,7 +321,7 @@ int draw_sidebar(int menu) {
+ 		lines++;
+ 	}
+ 	SETCOLOR(MT_COLOR_NORMAL);
+-	for ( ; lines < LINES-1 - (menu != MENU_PAGER || option(OPTSTATUSONTOP)); lines++ ) {
++	for ( ; lines < SidebarHeight; lines++ ) {
+ 		int i = 0;
+ 		move( lines, 0 );
+ 		for ( ; i < SidebarWidth - delim_len; i++ )
+-- 
+1.7.7.3
+

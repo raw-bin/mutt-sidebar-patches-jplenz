@@ -1,0 +1,30 @@
+From ff262956c0e343eead58e6ca10df4d92be6bd9fa Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Mon, 24 Oct 2011 16:43:46 +0200
+Subject: [PATCH 06/19] Fix counting of flagged mails in mboxes
+
+In contrast to the `mh_buffy_update' function, `buffy_mbox_update' won't
+set mailbox->msg_flagged. This clearly is a bug, because once the
+mailbox is opened the correct number of flagged messages is copied over
+from the (CONTEXT *) ctx.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ buffy.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/buffy.c b/buffy.c
+index 719e1c0..5f90a45 100644
+--- a/buffy.c
++++ b/buffy.c
+@@ -443,6 +443,7 @@ void buffy_mbox_update (BUFFY* mailbox)
+   {
+     mailbox->msgcount = ctx->msgcount;
+     mailbox->msg_unread = ctx->unread;
++    mailbox->msg_flagged = ctx->flagged;
+     mx_close_mailbox(ctx, 0);
+   }
+ }
+-- 
+1.7.7.3
+

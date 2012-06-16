@@ -1,0 +1,48 @@
+From 1af305a1ab191a273656e19e7a72db4a45a5cb0f Mon Sep 17 00:00:00 2001
+From: Julius Plenz <plenz@cis.fu-berlin.de>
+Date: Mon, 24 Oct 2011 19:35:43 +0200
+Subject: [PATCH 11/19] buffy: check msg_unread if sidebar is active
+
+This will list the mailboxes that have mailbox->msg_unread > 0, instead
+of trusting mtime or similar stuff. (The sidebar has the information,
+anyway, and this won't allow the status line buffy and the sidebar to be
+out of sync.)
+
+NOTE: This will only work for mboxes and Maildirs.
+
+Signed-off-by: Julius Plenz <plenz@cis.fu-berlin.de>
+---
+ buffy.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/buffy.c b/buffy.c
+index 68f31c3..088927f 100644
+--- a/buffy.c
++++ b/buffy.c
+@@ -297,6 +297,11 @@ static int buffy_maildir_hasnew (BUFFY* mailbox)
+ 
+   snprintf (path, sizeof (path), "%s/new", mailbox->path);
+ 
++  if (option(OPTSIDEBAR) && mailbox->msg_unread > 0) {
++      mailbox->new = 1;
++      return 1;
++  }
++
+   /* when $mail_check_recent is set, if the new/ directory hasn't been modified since
+    * the user last exited the mailbox, then we know there is no recent mail.
+    */
+@@ -434,6 +439,11 @@ static int buffy_mbox_hasnew (BUFFY* mailbox, struct stat *sb)
+       (sb->st_ctime != sb->st_mtime || sb->st_ctime != sb->st_atime))
+     mailbox->newly_created = 0;
+ 
++  if (option(OPTSIDEBAR) && mailbox->msg_unread > 0) {
++      mailbox->new = 1;
++      rc = 1;
++  }
++
+   return rc;
+ }
+ 
+-- 
+1.7.7.3
+
