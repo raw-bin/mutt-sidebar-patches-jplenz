@@ -1,0 +1,23 @@
+From 2f0a5ad21ca0f98bda8be04abb5a55a2250709ba Mon Sep 17 00:00:00 2001
+From: Robin Randhawa <robin.randhawa@gmail.com>
+Date: Sat, 16 Jun 2012 00:13:35 +0100
+Subject: [PATCH] Remove outdated AM_C_PROTOTYPES from configure.ac.
+
+---
+ configure.ac |    1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 91964c1..1fad113 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -27,7 +27,6 @@ AC_MSG_RESULT($mutt_cv_prefix)
+ 
+ AC_PROG_CC
+ AC_ISC_POSIX
+-AM_C_PROTOTYPES
+ if test "x$U" != "x"; then
+   AC_MSG_ERROR(Compiler not ANSI compliant)
+ fi
+-- 
+1.7.10.2
