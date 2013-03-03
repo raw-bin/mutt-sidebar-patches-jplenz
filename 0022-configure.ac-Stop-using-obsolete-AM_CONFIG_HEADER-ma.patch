@@ -1,0 +1,26 @@
+From 1527832cd0a18450e3d097ea871d76ff506db7c7 Mon Sep 17 00:00:00 2001
+From: Robin Randhawa <robin.randhawa@arm.com>
+Date: Sun, 3 Mar 2013 08:27:40 +0000
+Subject: [PATCH] configure.ac: Stop using obsolete AM_CONFIG_HEADER macro.
+
+Replace it with the recommended AC_CONFIG_HEADERS macro instead.
+---
+ configure.ac | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 5a8c7f0..b794a67 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -5,7 +5,7 @@ dnl !!! TO DUMP THEIR RESULTS WHEN MUTT -V IS CALLED            !!!
+ 
+ AC_PREREQ([2.54])
+ AC_INIT([mutt.h])
+-AM_CONFIG_HEADER([config.h])
++AC_CONFIG_HEADERS([config.h])
+ 
+ mutt_cv_version=`cat $srcdir/VERSION`
+ AM_INIT_AUTOMAKE(mutt, $mutt_cv_version)
+-- 
+1.8.1.5
+
